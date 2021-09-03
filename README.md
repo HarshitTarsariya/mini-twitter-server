@@ -5,6 +5,7 @@
 * mongo-DB
 
 ### Steps
+* git clone
 * npm install
 * npm start
 
