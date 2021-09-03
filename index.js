@@ -37,8 +37,8 @@ const tweetORM = tweet;
 
 const checkUser=async (req,res,next)=>{
     let token= req.headers['x-token'];
-    token=token.trim();
-    if(token.length>50){
+
+    if(token && token.length>50){
         try{
             const {user} = jwt.verify(token,secret);
             req.user=user;
@@ -115,16 +115,31 @@ app.post('/tweet',verify,(req,res)=>{
 });
 
 app.get('/tweets',verify,async(req,res)=>{
-    let Tweets=[];
-    tweetORM.find({id:req.user._id},(err,data)=>{
+    var Tweets=[];
+
+    tweetORM.find({user:req.user._id},(err,data)=>{
         if(err) res.status(400).json({auth:false,message:'Internal Server Error'});
-        else    res.status(200).json({auth:true,tweets:data});
+        else{
+            if(data.length)
+                Tweets=[...Tweets,...data];
+
+            userORM.find({_id:req.user._id},(err,data)=>{
+                if(err) return res.status(400).json({auth:false,message:'Internal Server Error'});
+                tweetORM.find({user:{$in:data[0].following}},(err,data)=>{
+                    if(data.length)
+                        Tweets=[...Tweets,...data];
+                    Tweets.sort((a,b)=>parseInt(b.time)-parseInt(a.time));
+                    res.status(200).json({auth:true,tweets:Tweets});
+                });
+            }); 
+            // res.status(200).json({auth:true,tweets:data});
+        }
     });
 });
 
 app.get('/users',verify,async(req,res)=>{
     let user_following=[];
-    userORM.findOne({id:req.user._id},{following:1,_id:0},(err,data)=>{
+    userORM.findOne({_id:req.user._id},{following:1,_id:0},(err,data)=>{
         if(err) return res.status(400).json({auth:false,message:'Internal Server Error'});
         user_following = data.following;
         
