@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
-import {createTokens} from './auth.js';
+import {createTokens,refreshTokens} from './auth.js';
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import bodyParser from 'body-parser';
@@ -37,6 +37,7 @@ const tweetORM = tweet;
 
 const checkUser=async (req,res,next)=>{
     const token= req.headers['x-token'];
+
     if(token){
 
         try{
@@ -74,28 +75,52 @@ app.post('/register',async(req,res)=>{
 
 app.post('/login',async(req,res)=>{
     const username=req.body.username,password=req.body.password;
-    const user=await userORM.findOne({where:{username}});
+    const user=await userORM.findOne({username:username});
+
     if(!user){
-        res.json({auth:false,message:'Invalid Username'}); 
+        return res.json({auth:false,path:'username',message:'Invalid Username'}); 
     }
     
     const validPassword=await bcrypt.compare(password,user.password);
     if(!validPassword){
-        res.json({auth:false,message:'Invalid Password'});
+        return res.json({auth:false,path:'password',message:'Invalid Password'});
     }
 
     const refreshTokenSecret=user.password+secret2;
     const [token,refreshToken]=await createTokens(user,secret,refreshTokenSecret);
 
-    // console.log(token);
-    // console.log(refreshTokenSecret);
-    // console.log(jwt.decode(token));
-    
+
     res.status(200)
         .json({auth:true,token:token,refreshToken:refreshToken});
 
 }); 
+const verify=(req,res,next)=>{
+    if(!req.user)    return res.json({auth:false,path:'notoken'});
+    else    next();
+}
+app.post('/tweet',verify,(req,res)=>{
 
+    const d=new Date();
+    let tmp_tweet=new tweetORM({
+        user:req.user._id,
+        tweet:req.body.tweet,
+        time:d.getTime().toString(),
+        username:req.user.username
+    });
+    
+    tmp_tweet.save((err,data)=>{
+        if(err) res.status(400).json({auth:false,message:'Internal Server Error'});
+        else    res.status(200).json({auth:true,message:'Tweet Successfully'});
+    });
+});
+
+app.get('/tweets',verify,async(req,res)=>{
+    let Tweets=[];
+    tweetORM.find({id:req.user._id},(err,data)=>{
+        if(err) res.status(400).json({auth:false,message:'Internal Server Error'});
+        else    res.status(200).json({auth:true,tweets:data});
+    });
+});
 
 
 
